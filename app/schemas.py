@@ -2,9 +2,9 @@ from pydantic import BaseModel
 from typing import Literal
 
 
-# =====================================
-# SEARCH PLANNER
-# =====================================
+# =====================================================
+# 1. SEARCH PLANNER SCHEMA
+# =====================================================
 
 BuyerType = Literal[
     "importer",
@@ -50,9 +50,9 @@ class SearchPlan(BaseModel):
 
 
 
-# =====================================
-# QUERY GENERATOR
-# =====================================
+# =====================================================
+# 2. QUERY GENERATION SCHEMA
+# =====================================================
 
 
 QueryCategory = Literal[
@@ -65,7 +65,7 @@ QueryCategory = Literal[
 ]
 
 
-SourceType = Literal[
+SearchSource = Literal[
     "google_search",
     "trade_directory",
     "company_website",
@@ -84,7 +84,7 @@ class SearchQuery(BaseModel):
 
     buyer_type: BuyerType
 
-    source_type: SourceType
+    source_type: SearchSource
 
     language: str
 
@@ -102,9 +102,9 @@ class SearchQueryList(BaseModel):
 
 
 
-# =====================================
-# QUERY RANKER
-# =====================================
+# =====================================================
+# 3. QUERY RANKING SCHEMA
+# =====================================================
 
 
 class RankedQuery(BaseModel):
@@ -125,9 +125,9 @@ class RankedQueryList(BaseModel):
 
 
 
-# =====================================
-# SERP RESULTS
-# =====================================
+# =====================================================
+# 4. SERP RESULTS SCHEMA
+# =====================================================
 
 
 class SERPResult(BaseModel):
@@ -146,9 +146,9 @@ class SERPResultList(BaseModel):
 
 
 
-# =====================================
-# URL CLASSIFICATION AGENT
-# =====================================
+# =====================================================
+# 5. URL CLASSIFICATION SCHEMA
+# =====================================================
 
 
 URLSourceType = Literal[
@@ -188,61 +188,9 @@ class URLClassificationList(BaseModel):
 
 
 
-# =====================================
-# COMPANY EXTRACTION (NEXT MODULE)
-# =====================================
-
-
-class CompanyProfile(BaseModel):
-
-    company_name: str | None
-
-    website: str
-
-    country: str | None
-
-    products: list[str]
-
-    buyer_type: list[BuyerType]
-
-    description: str | None
-
-    email: list[str]
-
-    phone: list[str]
-
-    linkedin: str | None
-
-    source_url: str
-
-    buying_signals: list[str]
-
-
-
-class CompanyProfileList(BaseModel):
-
-    companies: list[CompanyProfile]
-
-
-
-# =====================================
-# FINAL LEAD SCORE
-# =====================================
-
-
-class LeadScore(BaseModel):
-
-    company_name: str
-
-    relevance_score: float
-
-    contact_score: float
-
-    buying_intent_score: float
-
-    final_score: float
-
-    explanation: str
+# =====================================================
+# 6. WEBSITE SCRAPER OUTPUT
+# =====================================================
 
 
 class ScrapedWebsite(BaseModel):
@@ -253,4 +201,140 @@ class ScrapedWebsite(BaseModel):
 
     text_content: str
 
-    pages_scraped: list[str]
+    links: list[str]
+
+
+
+class ScrapedWebsiteList(BaseModel):
+
+    websites: list[ScrapedWebsite]
+
+
+
+# =====================================================
+# 7. COMPANY EXTRACTION SCHEMA
+# =====================================================
+
+
+class CompanyProfile(BaseModel):
+
+    company_name: str | None
+
+    website: str
+
+    country: str | None
+
+    description: str | None
+
+
+    buyer_type: list[BuyerType]
+
+
+    products: list[str]
+
+
+    importing_activity: bool
+
+
+    buying_signals: list[str]
+
+
+    email: list[str]
+
+
+    phone: list[str]
+
+
+    address: str | None
+
+
+    contact_page: str | None
+
+
+    linkedin: str | None
+
+
+
+class CompanyProfileList(BaseModel):
+
+    companies: list[CompanyProfile]
+
+
+
+# =====================================================
+# 8. EMAIL ENRICHMENT SCHEMA
+# =====================================================
+
+
+class ContactInformation(BaseModel):
+
+    company_name: str
+
+    domain: str
+
+    emails: list[str]
+
+    verified_emails: list[str]
+
+    contact_quality: float
+
+
+
+class ContactInformationList(BaseModel):
+
+    contacts: list[ContactInformation]
+
+
+
+# =====================================================
+# 9. DUPLICATE DETECTION SCHEMA
+# =====================================================
+
+
+class DuplicateCheck(BaseModel):
+
+    company_name: str
+
+    duplicate_found: bool
+
+    matched_company: str | None
+
+    similarity_score: float
+
+
+
+# =====================================================
+# 10. FINAL LEAD SCORING SCHEMA
+# =====================================================
+
+
+class LeadScore(BaseModel):
+
+    company_name: str
+
+
+    product_match_score: float
+
+
+    buyer_type_score: float
+
+
+    contact_score: float
+
+
+    buying_intent_score: float
+
+
+    company_quality_score: float
+
+
+    final_score: float
+
+
+    explanation: str
+
+
+
+class LeadScoreList(BaseModel):
+
+    leads: list[LeadScore]
