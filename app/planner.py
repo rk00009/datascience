@@ -274,7 +274,6 @@ Create the search plan.
 
         response_format=SearchPlan,
 
-        temperature=0.0
 
     )
 

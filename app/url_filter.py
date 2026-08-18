@@ -196,7 +196,7 @@ Return one classification for each result.
 
         response_format=URLClassificationList,
 
-        temperature=0.0
+        
 
     )
 

@@ -158,7 +158,7 @@ Return the best queries first.
 
         response_format=RankedQueryList,
 
-        temperature=0.0
+        
 
     )
 

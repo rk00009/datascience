@@ -145,7 +145,7 @@ Maximum queries: {min(search_plan.max_queries, 10)}
 
         response_format=SearchQueryList,
 
-        temperature=0.1
+        
 
     )
 
