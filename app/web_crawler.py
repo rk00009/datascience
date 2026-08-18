@@ -1,11 +1,28 @@
-from urllib.parse import urljoin, urlparse, urldefrag
+import asyncio
 
-from app.web_scraper import scrape_website
+from urllib.parse import (
+    urljoin,
+    urlparse,
+    urldefrag
+)
+
+from playwright.async_api import (
+    async_playwright
+)
 
 
 # ============================================================
-# IMPORTANT PAGE KEYWORDS
+# CONFIGURATION
 # ============================================================
+
+MAX_INTERNAL_PAGES = 1
+
+MAX_CONCURRENT_SITES = 5
+
+PAGE_TIMEOUT = 10000
+
+MAX_TEXT_LENGTH = 15000
+
 
 IMPORTANT_KEYWORDS = [
 
@@ -14,321 +31,666 @@ IMPORTANT_KEYWORDS = [
     "company",
     "product",
     "products",
-    "service",
     "contact",
+    "service",
+    "services",
     "imprint",
 
     # German
-    "uber",
     "ueber",
+    "uber",
     "unternehmen",
     "produkte",
     "sortiment",
     "kontakt",
+    "dienstleistung",
+    "dienstleistungen",
     "impressum"
 ]
 
 
-MAX_PAGES = 1
-
-
 # ============================================================
-# NORMALIZE URL
+# URL NORMALIZATION
 # ============================================================
 
-def normalize_url(url):
+def normalize_url(
+    url: str
+) -> str:
 
-    """
-    Removes fragments such as:
+    # Remove #fragment
+    url, _ = urldefrag(
+        url
+    )
 
-    #section
-    #product-grid
-    #contact
+    parsed = urlparse(
+        url
+    )
 
-    so that the crawler does not treat
-    the same webpage as multiple pages.
-    """
-
-    url, _ = urldefrag(url)
-
-    parsed = urlparse(url)
-
-    # Remove trailing slash except for homepage
     path = parsed.path.rstrip("/")
 
+
     if not path:
+
         path = ""
 
-    normalized = (
+
+    return (
         f"{parsed.scheme}://"
         f"{parsed.netloc}"
         f"{path}"
     )
 
-    return normalized
-
 
 # ============================================================
-# SAME DOMAIN CHECK
+# DOMAIN CHECK
 # ============================================================
 
-def is_same_domain(base_url, link):
+def same_domain(
+    base_url: str,
+    target_url: str
+) -> bool:
 
     base_domain = urlparse(
-        normalize_url(base_url)
+        normalize_url(
+            base_url
+        )
     ).netloc.lower()
 
-    link_domain = urlparse(
-        normalize_url(link)
+
+    target_domain = urlparse(
+        normalize_url(
+            target_url
+        )
     ).netloc.lower()
+
 
     return (
-        base_domain == link_domain
-        or link_domain == ""
+        base_domain == target_domain
     )
 
 
 # ============================================================
-# USEFUL PAGE CHECK
+# USEFUL PAGE DETECTION
 # ============================================================
 
-def is_useful_page(url):
+def useful_link(
+    url: str,
+    anchor_text: str = ""
+) -> bool:
 
-    normalized_url = normalize_url(
-        url
-    )
-
-    url_lower = normalized_url.lower()
-
-    for keyword in IMPORTANT_KEYWORDS:
-
-        if keyword in url_lower:
-
-            return True
-
-    return False
-
-
-# ============================================================
-# EXTRACT USEFUL INTERNAL LINKS
-# ============================================================
-
-def extract_useful_links(
-    base_url,
-    links
-):
-
-    useful_links = []
-
-    base_url = normalize_url(
-        base_url
+    combined = (
+        url.lower()
+        + " "
+        + anchor_text.lower()
     )
 
 
-    for link in links:
+    return any(
 
-        # Convert relative URL to absolute URL
-        absolute_url = urljoin(
-            base_url,
-            link
+        keyword in combined
+
+        for keyword
+        in IMPORTANT_KEYWORDS
+
+    )
+
+
+# ============================================================
+# TEXT CLEANING
+# ============================================================
+
+def clean_text(
+    text: str
+) -> str:
+
+    lines = []
+
+
+    for line in text.splitlines():
+
+        line = " ".join(
+            line.split()
         )
 
 
-        # Remove #fragment
-        absolute_url = normalize_url(
-            absolute_url
+        if len(line) < 3:
+            continue
+
+
+        lines.append(
+            line
         )
 
 
-        # Ignore external websites
-        if not is_same_domain(
-            base_url,
-            absolute_url
-        ):
-            continue
+    cleaned = "\n".join(
+        lines
+    )
 
 
-        # Ignore homepage
-        if absolute_url == base_url:
-
-            continue
-
-
-        # Only keep useful pages
-        if not is_useful_page(
-            absolute_url
-        ):
-
-            continue
+    return cleaned[
+        :MAX_TEXT_LENGTH
+    ]
 
 
-        # Avoid duplicates
-        if absolute_url not in useful_links:
+# ============================================================
+# SCRAPE ONE PAGE
+# ============================================================
 
-            useful_links.append(
-                absolute_url
+async def scrape_page(
+    page,
+    url: str
+) -> dict:
+
+    print(
+        f"  Scraping: {url}"
+    )
+
+
+    try:
+
+        await page.goto(
+
+            url,
+
+            wait_until="domcontentloaded",
+
+            timeout=PAGE_TIMEOUT
+
+        )
+
+
+        # Small wait for dynamic content.
+        await page.wait_for_timeout(
+            400
+        )
+
+
+    except Exception as e:
+
+        print(
+            f"  Page load warning: {e}"
+        )
+
+
+    # ========================================================
+    # REMOVE UNNECESSARY ELEMENTS
+    # ========================================================
+
+    try:
+
+        await page.evaluate(
+            """
+            () => {
+
+                const selectors = [
+
+                    'script',
+                    'style',
+                    'noscript',
+                    'svg',
+                    'iframe',
+
+                    'nav',
+                    'footer',
+
+                    '[id*="cookie"]',
+                    '[class*="cookie"]',
+
+                    '[id*="consent"]',
+                    '[class*="consent"]',
+
+                    '[role="dialog"]',
+                    '[role="alertdialog"]'
+
+                ];
+
+
+                for (
+                    const selector
+                    of selectors
+                ) {
+
+                    document
+                        .querySelectorAll(
+                            selector
+                        )
+                        .forEach(
+                            element =>
+                            element.remove()
+                        );
+
+                }
+
+            }
+            """
+        )
+
+    except Exception:
+        pass
+
+
+    # ========================================================
+    # TITLE
+    # ========================================================
+
+    try:
+
+        title = await page.title()
+
+    except Exception:
+
+        title = ""
+
+
+    # ========================================================
+    # MAIN CONTENT
+    # ========================================================
+
+    text = ""
+
+
+    try:
+
+        main = page.locator(
+            "main"
+        )
+
+
+        if await main.count():
+
+            text = await main.inner_text(
+                timeout=2000
+            )
+
+        else:
+
+            text = await page.locator(
+                "body"
+            ).inner_text(
+                timeout=3000
             )
 
 
-        # Stop once we have enough
-        if len(useful_links) >= MAX_PAGES:
+    except Exception:
 
-            break
+        try:
+
+            text = await page.locator(
+                "body"
+            ).inner_text(
+                timeout=3000
+            )
+
+        except Exception:
+
+            text = ""
 
 
-    return useful_links
-
-
-# ============================================================
-# CRAWL WEBSITE
-# ============================================================
-
-def crawl_website(url):
-
-    print(
-        f"\nCrawling website: {url}"
+    text = clean_text(
+        text
     )
 
 
-    # --------------------------------------------------------
-    # Normalize starting URL
-    # --------------------------------------------------------
+    # ========================================================
+    # FIND INTERNAL LINKS
+    # ========================================================
+
+    links = []
+
+
+    try:
+
+        elements = await page.locator(
+            "a"
+        ).all()
+
+
+        for element in elements:
+
+            href = await element.get_attribute(
+                "href"
+            )
+
+
+            if not href:
+                continue
+
+
+            try:
+
+                anchor_text = await element.inner_text()
+
+            except Exception:
+
+                anchor_text = ""
+
+
+            absolute_url = normalize_url(
+
+                urljoin(
+                    url,
+                    href
+                )
+
+            )
+
+
+            if not same_domain(
+                url,
+                absolute_url
+            ):
+
+                continue
+
+
+            if absolute_url == normalize_url(
+                url
+            ):
+
+                continue
+
+
+            if not useful_link(
+                absolute_url,
+                anchor_text
+            ):
+
+                continue
+
+
+            if absolute_url not in links:
+
+                links.append(
+                    absolute_url
+                )
+
+
+    except Exception:
+        pass
+
+
+    return {
+
+        "url": url,
+
+        "title": title,
+
+        "text_content": text,
+
+        "links": links
+
+    }
+
+
+# ============================================================
+# CRAWL ONE COMPANY
+# ============================================================
+
+async def crawl_single_website(
+    browser,
+    url: str
+) -> dict:
 
     url = normalize_url(
         url
     )
 
 
-    # --------------------------------------------------------
-    # STEP 1: Scrape homepage
-    # --------------------------------------------------------
-
-    homepage_data = scrape_website(
-        url
+    context = await browser.new_context(
+        ignore_https_errors=True
     )
 
 
-    # --------------------------------------------------------
-    # STEP 2: Find useful internal links
-    # --------------------------------------------------------
+    page = await context.new_page()
 
-    useful_links = extract_useful_links(
 
-        url,
+    try:
 
-        homepage_data.get(
-            "links",
-            []
+        # ====================================================
+        # PAGE 1 — HOMEPAGE
+        # ====================================================
+
+        homepage = await scrape_page(
+            page,
+            url
         )
 
-    )
+
+        pages = [
+            homepage
+        ]
 
 
-    print(
-        f"\nUseful internal pages found: "
-        f"{len(useful_links)}"
-    )
+        # ====================================================
+        # PAGE 2 — ONE USEFUL PAGE
+        # ====================================================
+
+        useful_pages = homepage[
+            "links"
+        ][
+            :MAX_INTERNAL_PAGES
+        ]
 
 
-    for link in useful_links:
+        if useful_pages:
+
+            second_page = await scrape_page(
+
+                page,
+
+                useful_pages[0]
+
+            )
+
+
+            pages.append(
+                second_page
+            )
+
+
+        # ====================================================
+        # COMBINE CONTENT
+        # ====================================================
+
+        combined_parts = []
+
+
+        for page_data in pages:
+
+            combined_parts.append(
+
+                f"""
+SOURCE PAGE:
+{page_data['url']}
+
+TITLE:
+{page_data['title']}
+
+CONTENT:
+{page_data['text_content']}
+"""
+
+            )
+
+
+        combined_text = clean_text(
+
+            "\n\n".join(
+                combined_parts
+            )
+
+        )
+
+
+        return {
+
+            "company_url": url,
+
+            "pages_scraped": [
+
+                item["url"]
+
+                for item in pages
+
+            ],
+
+            "combined_text":
+            combined_text,
+
+            "title":
+            homepage["title"],
+
+            "links":
+            homepage["links"]
+
+        }
+
+
+    except Exception as e:
 
         print(
-            f"  → {link}"
+            f"  Crawl failed: "
+            f"{url} -> {e}"
         )
 
 
-    # --------------------------------------------------------
-    # STEP 3: Build page list
-    # --------------------------------------------------------
+        return {
 
-    pages_to_scrape = [
+            "company_url": url,
 
-        url
+            "pages_scraped": [],
 
-    ] + useful_links
+            "combined_text": "",
+
+            "title": "",
+
+            "links": []
+
+        }
 
 
-    # Remove duplicates while preserving order
+    finally:
 
-    pages_to_scrape = list(
+        await page.close()
+
+        await context.close()
+
+
+# ============================================================
+# MULTI-COMPANY CRAWLER
+# ============================================================
+
+async def crawl_websites_async(
+    urls: list[str]
+) -> list[dict]:
+
+    urls = list(
         dict.fromkeys(
-            pages_to_scrape
+
+            normalize_url(url)
+
+            for url in urls
+
+            if url
+
         )
     )
 
 
-    print(
-        f"\nTotal pages to scrape: "
-        f"{len(pages_to_scrape)}"
+    if not urls:
+
+        return []
+
+
+    semaphore = asyncio.Semaphore(
+        MAX_CONCURRENT_SITES
     )
 
 
-    # --------------------------------------------------------
-    # STEP 4: Scrape each page
-    # --------------------------------------------------------
+    async with async_playwright() as p:
 
-    combined_text = ""
-
-    scraped_pages = []
-
-
-    for page_url in pages_to_scrape:
-
-        print(
-            f"\nScraping page: {page_url}"
+        # ONE browser for all websites
+        browser = await p.chromium.launch(
+            headless=True
         )
 
 
-        # Homepage already scraped
-        if page_url == url:
+        async def crawl_with_limit(
+            url
+        ):
 
-            data = homepage_data
+            async with semaphore:
 
-        else:
+                return await crawl_single_website(
 
-            data = scrape_website(
-                page_url
-            )
+                    browser,
+
+                    url
+
+                )
 
 
-        scraped_pages.append(
-            page_url
+        results = await asyncio.gather(
+
+            *[
+                crawl_with_limit(url)
+                for url in urls
+            ]
+
         )
 
 
-        page_text = data.get(
-            "text_content",
-            ""
+        await browser.close()
+
+
+    return results
+
+
+# ============================================================
+# SYNCHRONOUS WRAPPER
+# ============================================================
+
+def crawl_websites(
+    urls: list[str]
+) -> list[dict]:
+
+    return asyncio.run(
+
+        crawl_websites_async(
+            urls
         )
 
-
-        if page_text:
-
-            combined_text += (
-
-                "\n\n"
-                "================================"
-                "\n"
-                f"SOURCE PAGE: {page_url}"
-                "\n"
-                "================================"
-                "\n\n"
-                +
-                page_text
-
-            )
+    )
 
 
-    # --------------------------------------------------------
-    # STEP 5: Return combined result
-    # --------------------------------------------------------
+# ============================================================
+# SINGLE WEBSITE WRAPPER
+# ============================================================
 
-    return {
+def crawl_website(
+    url: str
+) -> dict:
 
-        "company_url": url,
+    results = crawl_websites(
+        [url]
+    )
 
-        "pages_scraped": scraped_pages,
 
-        "combined_text": combined_text
+    if not results:
 
-    }
+        return {
+
+            "company_url": url,
+
+            "pages_scraped": [],
+
+            "combined_text": "",
+
+            "title": "",
+
+            "links": []
+
+        }
+
+
+    return results[0]
