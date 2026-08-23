@@ -4,21 +4,16 @@ from app.planner import create_search_plan
 from app.query_generator import generate_queries
 from app.query_ranker import rank_queries
 from app.query_deduplicator import remove_duplicate_queries
-from app.search_engine import search_google
+
+from app.search_engine import search_multiple_queries
 from app.url_filter import classify_urls
 
+from app.web_crawler import crawl_websites
+from app.company_extractor import (
+    extract_multiple_company_profiles
+)
+
 from app.schemas import SERPResultList
-
-
-def print_stage_time(stage_name, start_time):
-
-    elapsed = time.perf_counter() - start_time
-
-    print(
-        f"\n{stage_name} Time: {elapsed:.2f} seconds"
-    )
-
-    return elapsed
 
 
 def main():
@@ -26,25 +21,33 @@ def main():
     total_start = time.perf_counter()
 
 
-    # =====================================================
+    # ========================================================
     # 1. USER INPUT
-    # =====================================================
+    # ========================================================
 
     user_query = input(
         "Enter buyer requirement: "
     )
 
 
-    # =====================================================
-    # 2. SEARCH PLANNER
-    # =====================================================
+    # ========================================================
+    # 2. SEARCH PLAN
+    # ========================================================
 
-    print("\n==============================")
-    print("CREATING SEARCH PLAN")
-    print("==============================\n")
+    print(
+        "\n=============================="
+    )
+
+    print(
+        "CREATING SEARCH PLAN"
+    )
+
+    print(
+        "=============================="
+    )
 
 
-    start_time = time.perf_counter()
+    start = time.perf_counter()
 
 
     search_plan = create_search_plan(
@@ -59,30 +62,38 @@ def main():
     )
 
 
-    print_stage_time(
-        "Search Planner",
-        start_time
+    print(
+        f"\nTime: "
+        f"{time.perf_counter() - start:.2f}s"
     )
 
 
-    # =====================================================
-    # 3. QUERY GENERATOR
-    # =====================================================
+    # ========================================================
+    # 3. QUERY GENERATION
+    # ========================================================
 
-    print("\n==============================")
-    print("GENERATING SEARCH QUERIES")
-    print("==============================\n")
+    print(
+        "\n=============================="
+    )
+
+    print(
+        "GENERATING SEARCH QUERIES"
+    )
+
+    print(
+        "=============================="
+    )
 
 
-    start_time = time.perf_counter()
+    start = time.perf_counter()
 
 
-    search_queries = generate_queries(
+    generated_queries = generate_queries(
         search_plan
     )
 
 
-    for query in search_queries.queries:
+    for query in generated_queries.queries:
 
         print(
             query.model_dump_json(
@@ -91,26 +102,34 @@ def main():
         )
 
 
-    print_stage_time(
-        "Query Generator",
-        start_time
+    print(
+        f"\nTime: "
+        f"{time.perf_counter() - start:.2f}s"
     )
 
 
-    # =====================================================
-    # 4. QUERY RANKER
-    # =====================================================
+    # ========================================================
+    # 4. QUERY RANKING
+    # ========================================================
 
-    print("\n==============================")
-    print("RANKING QUERIES")
-    print("==============================\n")
+    print(
+        "\n=============================="
+    )
+
+    print(
+        "RANKING QUERIES"
+    )
+
+    print(
+        "=============================="
+    )
 
 
-    start_time = time.perf_counter()
+    start = time.perf_counter()
 
 
     ranked_queries = rank_queries(
-        search_queries
+        generated_queries
     )
 
 
@@ -123,31 +142,38 @@ def main():
         )
 
 
-    print_stage_time(
-        "Query Ranker",
-        start_time
+    print(
+        f"\nTime: "
+        f"{time.perf_counter() - start:.2f}s"
     )
 
 
-    # =====================================================
-    # 5. QUERY DEDUPLICATION
-    # =====================================================
+    # ========================================================
+    # 5. DEDUPLICATION
+    # ========================================================
 
-    print("\n==============================")
-    print("REMOVING DUPLICATE QUERIES")
-    print("==============================\n")
+    print(
+        "\n=============================="
+    )
 
+    print(
+        "REMOVING DUPLICATE QUERIES"
+    )
 
-    start_time = time.perf_counter()
+    print(
+        "=============================="
+    )
 
 
     final_queries = remove_duplicate_queries(
+
         ranked_queries.selected_queries
+
     )
 
 
     print(
-        f"Final Unique Queries: "
+        f"Final queries: "
         f"{len(final_queries)}"
     )
 
@@ -155,99 +181,78 @@ def main():
     for query in final_queries:
 
         print(
-            query.model_dump_json(
-                indent=2
-            )
+            f"  - {query.query}"
         )
 
 
-    print_stage_time(
-        "Query Deduplication",
-        start_time
+    # ========================================================
+    # 6. SERP SEARCH
+    # ========================================================
+
+    print(
+        "\n=============================="
+    )
+
+    print(
+        "SERP SEARCH"
+    )
+
+    print(
+        "=============================="
     )
 
 
-    # =====================================================
-    # 6. SERP API SEARCH
-    # =====================================================
-
-    print("\n==============================")
-    print("SEARCHING USING SERP API")
-    print("==============================\n")
+    start = time.perf_counter()
 
 
-    start_time = time.perf_counter()
+    query_strings = [
+
+        query.query
+
+        for query in final_queries
+
+    ]
 
 
-    all_results = []
+    all_results = search_multiple_queries(
 
+        query_strings,
 
-    for index, query in enumerate(
-        final_queries,
-        start=1
-    ):
+        num_results=5
 
-        print(
-            f"\n[{index}/{len(final_queries)}] "
-            f"Searching: {query.query}"
-        )
-
-
-        query_start = time.perf_counter()
-
-
-        try:
-
-            results = search_google(
-                query.query,
-                num_results=10
-            )
-
-
-            all_results.extend(
-                results
-            )
-
-
-            print(
-                f"  Results: {len(results)}"
-            )
-
-            print(
-                f"  Time: "
-                f"{time.perf_counter() - query_start:.2f}s"
-            )
-
-
-        except Exception as e:
-
-            print(
-                f"  ERROR: {e}"
-            )
+    )
 
 
     print(
-        f"\nTotal SERP Results: "
+        f"\nSERP results: "
         f"{len(all_results)}"
     )
 
 
-    print_stage_time(
-        "SERP Search",
-        start_time
+    print(
+        f"SERP Time: "
+        f"{time.perf_counter() - start:.2f}s"
     )
 
 
-    # =====================================================
+    # ========================================================
     # 7. URL CLASSIFICATION
-    # =====================================================
+    # ========================================================
 
-    print("\n==============================")
-    print("CLASSIFYING URLS")
-    print("==============================\n")
+    print(
+        "\n=============================="
+    )
+
+    print(
+        "CLASSIFYING SERP RESULTS"
+    )
+
+    print(
+        "=============================="
+    )
 
 
-    start_time = time.perf_counter()
+    start = time.perf_counter()
 
 
     serp_data = SERPResultList(
@@ -255,115 +260,71 @@ def main():
     )
 
 
-    try:
-
-        classified_urls = classify_urls(
-            serp_data
-        )
-
-
-    except Exception as e:
-
-        print(
-            f"URL classification failed: {e}"
-        )
-
-        return
-
-
-    print_stage_time(
-        "URL Classification",
-        start_time
+    classified_urls = classify_urls(
+        serp_data
     )
 
 
-    # =====================================================
-    # 8. DISPLAY CLASSIFIED RESULTS
-    # =====================================================
-
-    print("\n==============================")
-    print("CLASSIFIED RESULTS")
-    print("==============================\n")
+    print(
+        f"\nClassified: "
+        f"{len(classified_urls.results)}"
+    )
 
 
-    for result in classified_urls.results:
-
-        print(
-            result.model_dump_json(
-                indent=2
-            )
-        )
+    print(
+        f"Classification Time: "
+        f"{time.perf_counter() - start:.2f}s"
+    )
 
 
-    # =====================================================
-    # 9. FILTER ACTUAL LEADS
-    # =====================================================
+    # ========================================================
+    # 8. GET ONLY REAL LEADS
+    # ========================================================
 
-    valid_leads = [
+    print(
+        "\n=============================="
+    )
+
+    print(
+        "SELECTING LEADS"
+    )
+
+    print(
+        "=============================="
+    )
+
+
+    leads = [
 
         result
 
-        for result in classified_urls.results
+        for result
+        in classified_urls.results
 
         if result.is_lead
 
     ]
 
 
-    print("\n==============================")
-    print("LEAD SUMMARY")
-    print("==============================\n")
+    # Keep MVP small.
+
+    leads = leads[:10]
 
 
     print(
-        f"Total SERP Results: "
-        f"{len(all_results)}"
+        f"Selected leads: "
+        f"{len(leads)}"
     )
 
 
-    print(
-        f"Classified Results: "
-        f"{len(classified_urls.results)}"
-    )
-
-
-    print(
-        f"Potential Leads: "
-        f"{len(valid_leads)}"
-    )
-
-
-    # =====================================================
-    # 10. SHOW ONLY VALID LEADS
-    # =====================================================
-
-    print("\n==============================")
-    print("VALID LEAD URLS")
-    print("==============================\n")
-
-
-    for index, lead in enumerate(
-        valid_leads,
-        start=1
-    ):
+    for lead in leads:
 
         print(
-            f"\nLead {index}"
+            f"\n{lead.company_name}"
         )
 
         print(
-            f"Company: "
-            f"{lead.company_name}"
-        )
-
-        print(
-            f"URL: "
-            f"{lead.url}"
-        )
-
-        print(
-            f"Type: "
-            f"{lead.source_type}"
+            lead.url
         )
 
         print(
@@ -371,15 +332,196 @@ def main():
             f"{lead.lead_probability}"
         )
 
+
+    # ========================================================
+    # 9. CRAWLING
+    # ========================================================
+
+    print(
+        "\n=============================="
+    )
+
+    print(
+        "CRAWLING COMPANIES"
+    )
+
+    print(
+        "=============================="
+    )
+
+
+    start = time.perf_counter()
+
+
+    lead_urls = [
+
+        lead.url
+
+        for lead in leads
+
+    ]
+
+
+    scraped_data = crawl_websites(
+        lead_urls
+    )
+
+
+    successful_crawls = [
+
+        item
+
+        for item in scraped_data
+
+        if item.get(
+            "crawl_success"
+        )
+
+    ]
+
+
+    print(
+        f"\nSuccessful crawls: "
+        f"{len(successful_crawls)}"
+    )
+
+
+    print(
+        f"Crawler Time: "
+        f"{time.perf_counter() - start:.2f}s"
+    )
+
+
+    # ========================================================
+    # 10. COMPANY EXTRACTION
+    # ========================================================
+
+    print(
+        "\n=============================="
+    )
+
+    print(
+        "EXTRACTING COMPANY PROFILES"
+    )
+
+    print(
+        "=============================="
+    )
+
+
+    start = time.perf_counter()
+
+
+    profiles = extract_multiple_company_profiles(
+
+        scraped_data
+
+    )
+
+
+    print(
+        f"\nProfiles extracted: "
+        f"{len(profiles)}"
+    )
+
+
+    print(
+        f"Extraction Time: "
+        f"{time.perf_counter() - start:.2f}s"
+    )
+
+
+    # ========================================================
+    # 11. FINAL RESULTS
+    # ========================================================
+
+    print(
+        "\n=============================="
+    )
+
+    print(
+        "FINAL BUYER RESULTS"
+    )
+
+    print(
+        "=============================="
+    )
+
+
+    for index, profile in enumerate(
+
+        profiles,
+
+        start=1
+
+    ):
+
         print(
-            f"Reason: "
-            f"{lead.reason}"
+            f"\nBUYER {index}"
+        )
+
+        print(
+            "------------------------------"
         )
 
 
-    # =====================================================
-    # 11. TOTAL PIPELINE TIME
-    # =====================================================
+        print(
+            f"Company: "
+            f"{profile.company_name}"
+        )
+
+
+        print(
+            f"Website: "
+            f"{profile.website}"
+        )
+
+
+        print(
+            f"Country: "
+            f"{profile.country}"
+        )
+
+
+        print(
+            f"Buyer Type: "
+            f"{profile.buyer_type}"
+        )
+
+
+        print(
+            f"Products: "
+            f"{profile.products}"
+        )
+
+
+        print(
+            f"Importing Activity: "
+            f"{profile.importing_activity}"
+        )
+
+
+        print(
+            f"Buying Signals: "
+            f"{profile.buying_signals}"
+        )
+
+
+        print(
+            f"Email: "
+            f"{profile.email}"
+        )
+
+
+        print(
+            f"Phone: "
+            f"{profile.phone}"
+        )
+
+
+    # ========================================================
+    # 12. TOTAL TIME
+    # ========================================================
 
     total_time = (
         time.perf_counter()
@@ -387,29 +529,35 @@ def main():
     )
 
 
-    print("\n==============================")
-    print("PERFORMANCE SUMMARY")
-    print("==============================\n")
-
+    print(
+        "\n=============================="
+    )
 
     print(
-        f"Total Pipeline Time: "
-        f"{total_time:.2f} seconds"
+        "PIPELINE PERFORMANCE"
+    )
+
+    print(
+        "=============================="
     )
 
 
     print(
-        f"Total Pipeline Time: "
+        f"Total Time: "
+        f"{total_time:.2f}s"
+    )
+
+
+    print(
+        f"Total Time: "
         f"{total_time / 60:.2f} minutes"
     )
 
 
-    print("\n==============================")
-    print("PIPELINE COMPLETE")
-    print("==============================")
-
+    print(
+        "\nPIPELINE COMPLETE"
+    )
 
 
 if __name__ == "__main__":
-
     main()
