@@ -1,21 +1,13 @@
-from pydantic import BaseModel
+# app/schemas.py
+
 from typing import Literal
 
+from pydantic import BaseModel, Field
 
-# =====================================================
-# 1. SEARCH PLANNER SCHEMA
-# =====================================================
 
-BuyerType = Literal[
-    "importer",
-    "distributor",
-    "wholesaler",
-    "food_processor",
-    "manufacturer",
-    "trading_company",
-    "retailer"
-]
-
+# ============================================================
+# SEARCH PLAN
+# ============================================================
 
 class SearchPlan(BaseModel):
 
@@ -23,318 +15,199 @@ class SearchPlan(BaseModel):
 
     product: str
 
-    product_synonyms: list[str]
+    product_synonyms: list[str] = Field(
+        default_factory=list
+    )
 
-    seller_origin: str | None
+    seller_origin: str | None = None
 
-    target_market: str | None
+    target_market: str | None = None
 
-    buyer_types: list[BuyerType]
+    buyer_types: list[str] = Field(
+        default_factory=list
+    )
 
-    buying_signals: list[str]
+    buying_signals: list[str] = Field(
+        default_factory=list
+    )
 
-    keywords: list[str]
+    keywords: list[str] = Field(
+        default_factory=list
+    )
 
-    languages: list[str]
+    languages: list[str] = Field(
+        default_factory=list
+    )
 
-    intent: Literal[
-        "buyer_discovery",
-        "importer_discovery",
-        "active_buyer_search",
-        "supplier_search"
-    ]
+    intent: str = "buyer_discovery"
 
-    max_results: int
+    max_results: int = 50
 
-    max_queries: int
-
-
-
-# =====================================================
-# 2. QUERY GENERATION SCHEMA
-# =====================================================
-
-
-QueryCategory = Literal[
-    "importer",
-    "distributor",
-    "wholesaler",
-    "food_processor",
-    "manufacturer",
-    "trading_company"
-]
+    max_queries: int = 10
 
 
-SearchSource = Literal[
-    "google_search",
-    "trade_directory",
-    "company_website",
-    "trade_exhibitor",
-    "public_database"
-]
-
+# ============================================================
+# SEARCH QUERY
+# ============================================================
 
 class SearchQuery(BaseModel):
 
     query: str
 
-    category: QueryCategory
+    purpose: str = ""
 
-    purpose: str
-
-    buyer_type: BuyerType
-
-    source_type: SearchSource
-
-    language: str
+    buyer_type: str = ""
 
     priority: Literal[
         "high",
         "medium",
         "low"
-    ]
-
+    ] = "medium"
 
 
 class SearchQueryList(BaseModel):
 
-    queries: list[SearchQuery]
+    queries: list[SearchQuery] = Field(
+        default_factory=list
+    )
 
 
-
-# =====================================================
-# 3. QUERY RANKING SCHEMA
-# =====================================================
-
+# ============================================================
+# RANKED QUERY
+# ============================================================
 
 class RankedQuery(BaseModel):
 
     query: str
 
-    relevance_score: float
+    relevance_score: float = 0
 
-    reason: str
+    reason: str = ""
 
-    keep: bool
-
+    keep: bool = True
 
 
 class RankedQueryList(BaseModel):
 
-    selected_queries: list[RankedQuery]
+    selected_queries: list[RankedQuery] = Field(
+        default_factory=list
+    )
 
 
+# Backward compatibility
+RankedSearchQuery = RankedQuery
+RankedSearchQueryList = RankedQueryList
 
-# =====================================================
-# 4. SERP RESULTS SCHEMA
-# =====================================================
 
+# ============================================================
+# SERP RESULT
+# ============================================================
 
 class SERPResult(BaseModel):
 
-    title: str | None
+    title: str = ""
 
     url: str
 
-    snippet: str | None
+    snippet: str = ""
 
+    query: str = ""
+
+    position: int | None = None
 
 
 class SERPResultList(BaseModel):
 
-    results: list[SERPResult]
+    results: list[SERPResult] = Field(
+        default_factory=list
+    )
 
 
-
-# =====================================================
-# 5. URL CLASSIFICATION SCHEMA
-# =====================================================
-
-
-URLSourceType = Literal[
-    "company_website",
-    "business_directory",
-    "trade_platform",
-    "trade_exhibitor",
-    "market_report",
-    "news",
-    "government",
-    "social_media",
-    "irrelevant"
-]
-
+# ============================================================
+# URL CLASSIFICATION
+# ============================================================
 
 class URLClassification(BaseModel):
 
     url: str
 
-    title: str | None
+    domain: str = ""
 
-    source_type: URLSourceType
+    # Company candidate
+    is_company_candidate: bool = False
 
-    company_name: str | None
+    # Lead candidate
+    is_lead: bool = False
 
-    is_lead: bool
+    # Company classification
+    company_type: str | None = None
 
-    lead_probability: float
+    # Scoring
+    relevance_score: float = Field(
+        default=0,
+        ge=0,
+        le=100
+    )
 
-    reason: str
+    # Explanation
+    reason: str = ""
 
+    # Final URL filter decision
+    keep: bool = False
 
 
 class URLClassificationList(BaseModel):
 
-    results: list[URLClassification]
+    results: list[URLClassification] = Field(
+        default_factory=list
+    )
 
 
-
-# =====================================================
-# 6. WEBSITE SCRAPER OUTPUT
-# =====================================================
-
-
-class ScrapedWebsite(BaseModel):
-
-    url: str
-
-    title: str | None
-
-    text_content: str
-
-    links: list[str]
-
-
-
-class ScrapedWebsiteList(BaseModel):
-
-    websites: list[ScrapedWebsite]
-
-
-
-# =====================================================
-# 7. COMPANY EXTRACTION SCHEMA
-# =====================================================
-
+# ============================================================
+# COMPANY PROFILE
+# ============================================================
 
 class CompanyProfile(BaseModel):
 
-    company_name: str | None
+    company_name: str | None = None
 
-    website: str
+    website: str | None = None
 
-    country: str | None
+    country: str | None = None
 
-    description: str | None
+    description: str | None = None
 
+    buyer_type: list[str] = Field(
+        default_factory=list
+    )
 
-    buyer_type: list[BuyerType]
+    products: list[str] = Field(
+        default_factory=list
+    )
 
+    importing_activity: bool = False
 
-    products: list[str]
+    buying_signals: list[str] = Field(
+        default_factory=list
+    )
 
+    email: list[str] = Field(
+        default_factory=list
+    )
 
-    importing_activity: bool
+    phone: list[str] = Field(
+        default_factory=list
+    )
 
+    address: str | None = None
 
-    buying_signals: list[str]
+    contact_page: str | None = None
 
-
-    email: list[str]
-
-
-    phone: list[str]
-
-
-    address: str | None
-
-
-    contact_page: str | None
-
-
-    linkedin: str | None
-
+    linkedin: str | None = None
 
 
 class CompanyProfileList(BaseModel):
 
-    companies: list[CompanyProfile]
-
-
-
-# =====================================================
-# 8. EMAIL ENRICHMENT SCHEMA
-# =====================================================
-
-
-class ContactInformation(BaseModel):
-
-    company_name: str
-
-    domain: str
-
-    emails: list[str]
-
-    verified_emails: list[str]
-
-    contact_quality: float
-
-
-
-class ContactInformationList(BaseModel):
-
-    contacts: list[ContactInformation]
-
-
-
-# =====================================================
-# 9. DUPLICATE DETECTION SCHEMA
-# =====================================================
-
-
-class DuplicateCheck(BaseModel):
-
-    company_name: str
-
-    duplicate_found: bool
-
-    matched_company: str | None
-
-    similarity_score: float
-
-
-
-# =====================================================
-# 10. FINAL LEAD SCORING SCHEMA
-# =====================================================
-
-
-class LeadScore(BaseModel):
-
-    company_name: str
-
-
-    product_match_score: float
-
-
-    buyer_type_score: float
-
-
-    contact_score: float
-
-
-    buying_intent_score: float
-
-
-    company_quality_score: float
-
-
-    final_score: float
-
-
-    explanation: str
-
-
-
-class LeadScoreList(BaseModel):
-
-    leads: list[LeadScore]
+    companies: list[CompanyProfile] = Field(
+        default_factory=list
+    )
