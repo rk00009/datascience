@@ -2,7 +2,7 @@
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, computed_field
 
 
 # ============================================================
@@ -10,39 +10,22 @@ from pydantic import BaseModel, Field
 # ============================================================
 
 class SearchPlan(BaseModel):
-
     original_query: str
-
     product: str
 
-    product_synonyms: list[str] = Field(
-        default_factory=list
-    )
+    product_synonyms: list[str] = Field(default_factory=list)
 
     seller_origin: str | None = None
-
     target_market: str | None = None
 
-    buyer_types: list[str] = Field(
-        default_factory=list
-    )
-
-    buying_signals: list[str] = Field(
-        default_factory=list
-    )
-
-    keywords: list[str] = Field(
-        default_factory=list
-    )
-
-    languages: list[str] = Field(
-        default_factory=list
-    )
+    buyer_types: list[str] = Field(default_factory=list)
+    buying_signals: list[str] = Field(default_factory=list)
+    keywords: list[str] = Field(default_factory=list)
+    languages: list[str] = Field(default_factory=list)
 
     intent: str = "buyer_discovery"
 
     max_results: int = 50
-
     max_queries: int = 10
 
 
@@ -51,11 +34,8 @@ class SearchPlan(BaseModel):
 # ============================================================
 
 class SearchQuery(BaseModel):
-
     query: str
-
     purpose: str = ""
-
     buyer_type: str = ""
 
     priority: Literal[
@@ -66,10 +46,7 @@ class SearchQuery(BaseModel):
 
 
 class SearchQueryList(BaseModel):
-
-    queries: list[SearchQuery] = Field(
-        default_factory=list
-    )
+    queries: list[SearchQuery] = Field(default_factory=list)
 
 
 # ============================================================
@@ -77,83 +54,148 @@ class SearchQueryList(BaseModel):
 # ============================================================
 
 class RankedQuery(BaseModel):
-
     query: str
-
     relevance_score: float = 0
-
     reason: str = ""
-
     keep: bool = True
 
 
 class RankedQueryList(BaseModel):
-
     selected_queries: list[RankedQuery] = Field(
         default_factory=list
     )
 
 
-# Backward compatibility
 RankedSearchQuery = RankedQuery
 RankedSearchQueryList = RankedQueryList
 
 
 # ============================================================
-# SERP RESULT
+# SERP
 # ============================================================
 
 class SERPResult(BaseModel):
-
     title: str = ""
+    url: str
+    snippet: str = ""
+    query: str = ""
+    position: int | None = None
+
+
+class SERPResultList(BaseModel):
+    results: list[SERPResult] = Field(
+        default_factory=list
+    )
+
+    def __iter__(self):
+        return iter(self.results)
+
+    def __len__(self):
+        return len(self.results)
+
+
+# ============================================================
+# URL / LEAD CLASSIFICATION
+#
+# This is the object passed from:
+#
+# SERP
+#   ↓
+# URL FILTER
+#   ↓
+# LEAD SELECTION
+#   ↓
+# CRAWLER
+#
+# It therefore contains ALL fields needed by main.py
+# before company extraction.
+# ============================================================
+
+class URLClassification(BaseModel):
+
+    # --------------------------------------------------------
+    # URL
+    # --------------------------------------------------------
 
     url: str
+
+    website: str | None = None
+
+    domain: str = ""
+
+    # --------------------------------------------------------
+    # SERP INFORMATION
+    # --------------------------------------------------------
+
+    title: str = ""
 
     snippet: str = ""
 
     query: str = ""
 
-    position: int | None = None
+    # --------------------------------------------------------
+    # COMPANY PREVIEW
+    # --------------------------------------------------------
 
+    company_name: str | None = None
 
-class SERPResultList(BaseModel):
+    country: str | None = None
 
-    results: list[SERPResult] = Field(
-        default_factory=list
-    )
-
-
-# ============================================================
-# URL CLASSIFICATION
-# ============================================================
-
-class URLClassification(BaseModel):
-
-    url: str
-
-    domain: str = ""
-
-    # Company candidate
-    is_company_candidate: bool = False
-
-    # Lead candidate
-    is_lead: bool = False
-
-    # Company classification
     company_type: str | None = None
 
-    # Scoring
+    # --------------------------------------------------------
+    # LEAD SCORING
+    # --------------------------------------------------------
+
     relevance_score: float = Field(
         default=0,
         ge=0,
         le=100
     )
 
-    # Explanation
+    lead_probability: float = Field(
+        default=0,
+        ge=0,
+        le=100
+    )
+
+    # --------------------------------------------------------
+    # CLASSIFICATION
+    # --------------------------------------------------------
+
+    is_company_candidate: bool = False
+
+    is_lead: bool = False
+
+    keep: bool = False
+
+    # --------------------------------------------------------
+    # REASON
+    # --------------------------------------------------------
+
     reason: str = ""
 
-    # Final URL filter decision
-    keep: bool = False
+    classification_reason: str = ""
+
+    # --------------------------------------------------------
+    # CRAWLER COMPATIBILITY
+    # --------------------------------------------------------
+
+    @computed_field
+    @property
+    def crawler_url(self) -> str:
+        return self.website or self.url
+
+    @computed_field
+    @property
+    def display_name(self) -> str:
+        if self.company_name:
+            return self.company_name
+
+        if self.title:
+            return self.title
+
+        return self.domain or self.url
 
 
 class URLClassificationList(BaseModel):
@@ -161,6 +203,32 @@ class URLClassificationList(BaseModel):
     results: list[URLClassification] = Field(
         default_factory=list
     )
+
+    @computed_field
+    @property
+    def selected_leads(self) -> list[URLClassification]:
+
+        return [
+            item
+            for item in self.results
+            if item.is_lead
+        ]
+
+    @computed_field
+    @property
+    def accepted(self) -> list[URLClassification]:
+
+        return [
+            item
+            for item in self.results
+            if item.keep
+        ]
+
+    def __iter__(self):
+        return iter(self.results)
+
+    def __len__(self):
+        return len(self.results)
 
 
 # ============================================================
@@ -211,3 +279,14 @@ class CompanyProfileList(BaseModel):
     companies: list[CompanyProfile] = Field(
         default_factory=list
     )
+
+    @computed_field
+    @property
+    def results(self) -> list[CompanyProfile]:
+        return self.companies
+
+    def __iter__(self):
+        return iter(self.companies)
+
+    def __len__(self):
+        return len(self.companies)
