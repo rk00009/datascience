@@ -317,19 +317,43 @@ def main():
     )
 
 
-    for lead in leads:
+    for index, lead in enumerate(
+        leads,
+        start=1
+    ):
+
+        print()
 
         print(
-            f"\n{lead.company_name}"
+            f"{index}. Lead"
         )
 
         print(
-            lead.url
+            f"URL: {lead.url}"
         )
 
         print(
-            f"Probability: "
-            f"{lead.lead_probability}"
+            f"Domain: {lead.domain}"
+        )
+
+        print(
+            f"Company Type: {lead.company_type}"
+        )
+
+        print(
+            f"Lead: {lead.is_lead}"
+        )
+
+        print(
+            f"Company Candidate: {lead.is_company_candidate}"
+        )
+
+        print(
+            f"Score: {lead.relevance_score}"
+        )
+
+        print(
+            f"Reason: {lead.reason}"
         )
 
 
